@@ -72,12 +72,16 @@ impl BetterCallDrone {
     }
     fn handle_command(&mut self, command: DroneCommand) {
         match command {
-            DroneCommand::AddSender(_node_id, _sender) => todo!(),
-            DroneCommand::SetPacketDropRate(_pdr) => todo!(),
+            DroneCommand::AddSender(_node_id, _sender) => self.add_sender(_node_id, _sender),
+            DroneCommand::SetPacketDropRate(_pdr) => self.set_pdr(_pdr),
             DroneCommand::Crash => unreachable!(),
-            DroneCommand::RemoveSender(_node_id) => todo!(),
+            DroneCommand::RemoveSender(_node_id) => self.remove_sender(_node_id),
         }
     }
+
+    /// ======================================================================
+    /// HANDLE PACKETS
+    /// ======================================================================
 
     fn forward_packet(&mut self, mut packet: Packet, fragment_index: u64) {
         if self.id == packet.routing_header.hops[packet.routing_header.hop_index] {
@@ -136,6 +140,29 @@ impl BetterCallDrone {
             }).unwrap();
         }
     }
+
+    /// ======================================================================
+    /// HANDLE SIMULATION CONTROLLER COMMANDS
+    /// ======================================================================
+    fn add_sender(&mut self, node_id : NodeId, sender: Sender<Packet>) {
+        self.packet_send.insert(node_id, sender);
+        println!("Added sender id: {}, to drone #{}", node_id, self.id);
+    }
+
+    fn set_pdr(&mut self, pdr: f32) {
+        self.pdr = pdr;
+        println!("Updated packet drop rate of drone #{} to: {}", self.id, pdr);
+    }
+
+    fn remove_sender(&mut self, node_id : NodeId) {
+        if self.packet_send.remove(&node_id).is_some() {
+            println!("Removed sender id: {}, from drone #{}", node_id, self.id);
+        } else {
+            println!("Error while trying to remove sender id: {}, from drone #{}\nSender id don't exists!", node_id, self.id);
+        }
+    }
+
+
 }
 
 struct SimulationController {
