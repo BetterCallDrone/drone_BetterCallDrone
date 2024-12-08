@@ -110,9 +110,7 @@ impl BetterCallDrone {
     }
 
     fn should_drop_packet(&self) -> bool {
-        let mut rng = thread_rng();
-        let guess: f32 = rng.gen();
-        guess <= self.pdr
+        random::<f32>() <= self.pdr
     }
 
     fn send_nack(&mut self, routing_header: SourceRoutingHeader, fragment_index: u64, session_id: u64, nack_type: NackType) {
