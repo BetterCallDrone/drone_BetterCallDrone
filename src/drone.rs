@@ -68,7 +68,7 @@ impl BetterCallDrone {
             PacketType::Nack(_) | PacketType::Ack(_) => self.forward_packet(packet, 0),
             PacketType::MsgFragment(_fragment) => self.handle_fragment(packet.routing_header, packet.session_id, _fragment),
             PacketType::FloodRequest(_flood_request) => todo!(),
-            PacketType::FloodResponse(_flood_response) => todo!(),
+            PacketType::FloodResponse(_) => self.forward_packet(packet, 0),
         }
     }
     fn handle_command(&mut self, command: DroneCommand) {
