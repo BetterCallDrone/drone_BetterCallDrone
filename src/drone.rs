@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::{fs, thread};
 use wg_2024::config::Config;
 use wg_2024::controller::{DroneCommand, DroneEvent};
+use wg_2024::controller::DroneEvent::{PacketDropped, PacketSent};
 use wg_2024::drone::Drone;
 use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{Ack, Fragment, Nack, NackType, Packet, PacketType};
@@ -88,7 +89,8 @@ impl BetterCallDrone {
             packet.routing_header.hop_index += 1;
             if let Some(next_hop) = packet.routing_header.hops.get(packet.routing_header.hop_index) {
                 if let Some(sender) = self.packet_send.get(next_hop) {
-                    sender.send(packet.clone()).unwrap();
+                    sender.send(packet.clone()).unwrap();                   // forwarding packet to next_hop
+                    self.controller_send.send(PacketSent(packet)).unwrap()  // sending confirmation to the SC
                 } else {
                     self.send_nack(packet.routing_header.clone(), fragment_index, packet.session_id, NackType::ErrorInRouting(*next_hop));
                 }
@@ -101,15 +103,18 @@ impl BetterCallDrone {
     }
 
     fn handle_fragment(&mut self, routing_header : SourceRoutingHeader, session_id : u64, fragment: Fragment) {
+        let rh = routing_header.clone();
+        let packet = Packet {
+            routing_header: rh,
+            session_id,
+            pack_type: PacketType::MsgFragment(fragment.clone()),
+        };
         if !self.should_drop_packet() {
             let index = fragment.fragment_index;
-            self.forward_packet(Packet {
-                routing_header,
-                session_id,
-                pack_type: PacketType::MsgFragment(fragment),
-            }, index);
+            self.forward_packet(packet, index);
         } else {
             self.send_nack(routing_header, fragment.fragment_index, session_id, NackType::Dropped);
+            self.controller_send.send(PacketDropped(packet)).unwrap()       // sending confirmation of drop to SC
         }
     }
 
