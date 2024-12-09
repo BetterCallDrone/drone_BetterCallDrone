@@ -149,6 +149,7 @@ impl BetterCallDrone {
     /// ======================================================================
     /// HANDLE SIMULATION CONTROLLER COMMANDS
     /// ======================================================================
+
     fn add_sender(&mut self, node_id : NodeId, sender: Sender<Packet>) {
         self.packet_send.insert(node_id, sender);
         println!("Added sender id: {}, to drone #{}", node_id, self.id);
