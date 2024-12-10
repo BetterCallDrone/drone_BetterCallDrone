@@ -10,11 +10,11 @@ use wg_2024::network::{NodeId, SourceRoutingHeader};
 use wg_2024::packet::{FloodRequest, Fragment, Nack, NackType, NodeType, Packet, PacketType};
 
 pub struct BetterCallDrone {
-    pub id: NodeId,
+    id: NodeId,
     controller_send: Sender<DroneEvent>,
     controller_recv: Receiver<DroneCommand>,
     packet_recv: Receiver<Packet>,
-    pub pdr: f32,
+    pdr: f32,
     pub packet_send: HashMap<NodeId, Sender<Packet>>,
 
     received_flood_ids: Vec<u64>,
