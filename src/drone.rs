@@ -1,3 +1,4 @@
+#[allow(unused)]
 use crossbeam_channel::{select_biased, Receiver, Sender};
 use std::collections::{HashMap};
 use colored::*;
@@ -14,7 +15,7 @@ pub struct BetterCallDrone {
     controller_recv: Receiver<DroneCommand>,
     packet_recv: Receiver<Packet>,
     pub pdr: f32,
-    packet_send: HashMap<NodeId, Sender<Packet>>,
+    pub packet_send: HashMap<NodeId, Sender<Packet>>,
 
     received_flood_ids: Vec<u64>,
     debug: bool,
@@ -238,20 +239,29 @@ impl BetterCallDrone {
     /// ======================================================================
 
     pub fn add_sender(&mut self, node_id: NodeId, sender: Sender<Packet>) {
-        self.packet_send.insert(node_id, sender);
-        println!("Added sender id: {}, to drone #{}", node_id, self.id);
+        if let Some(_) = self.packet_send.get(&node_id) {
+            println!("Error while trying to add sender id: {}, from drone #{}: Sender id already exists!", node_id, self.id);
+        } else {
+            self.packet_send.insert(node_id, sender);
+            println!("Added sender id {} to drone #{}", node_id, self.id);
+        }
     }
 
     pub fn set_pdr(&mut self, pdr: f32) {
-        self.pdr = pdr;
-        println!("Updated packet drop rate of drone #{} to: {}", self.id, pdr);
+        if pdr >= 0. && pdr <= 1. {
+            self.pdr = pdr;
+            println!("Set PDR: Updated for drone #{} to: {}", self.id, pdr);
+        } else {
+            println!("Set PDR: Invalid PDR for drone #{}", self.id);
+        }
     }
 
     pub fn remove_sender(&mut self, node_id: NodeId) {
-        if self.packet_send.remove(&node_id).is_some() {
+        if let Some(_) = self.packet_send.get(&node_id) {
+            self.packet_send.remove(&node_id);
             println!("Removed sender id: {}, from drone #{}", node_id, self.id);
         } else {
-            println!("Error while trying to remove sender id: {}, from drone #{}\nSender id don't exists!", node_id, self.id);
+            println!("Error while trying to remove sender id: {}, from drone #{}: Sender id does not exist!", node_id, self.id);
         }
     }
 
