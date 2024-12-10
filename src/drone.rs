@@ -229,7 +229,7 @@ impl BetterCallDrone {
                 },
                 session_id,
             }).unwrap();
-            // self.log_nack(&nack_type, session_id, fragment_index);
+            self.log_nack(&nack_type, session_id, fragment_index);
         }
     }
 
