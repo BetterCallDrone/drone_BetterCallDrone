@@ -209,7 +209,7 @@ mod flood_tests {
             d_events_send.clone(),
             d_comm_recv.clone(),
             d1_recv,
-            HashMap::from([(1, c1_send.clone()), (12, d2_send.clone()), (14, d2_send.clone())]),
+            HashMap::from([(1, c1_send.clone()), (12, d2_send.clone()), (14, d4_send.clone())]),
             0.0,
         );
 

@@ -69,16 +69,16 @@ impl BetterCallDrone {
         self.log_received(&packet);
         match packet.pack_type {
             PacketType::Nack(_) | PacketType::Ack(_) | PacketType::FloodResponse(_) => self.forward_packet(packet, 0),
-            PacketType::MsgFragment(_fragment) => self.handle_fragment(packet.routing_header, packet.session_id, _fragment),
-            PacketType::FloodRequest(_flood_request) => self.handle_ndp(_flood_request, packet.session_id),
+            PacketType::MsgFragment(fragment) => self.handle_fragment(packet.routing_header, packet.session_id, fragment),
+            PacketType::FloodRequest(flood_request) => self.handle_ndp(flood_request, packet.session_id),
         }
     }
     pub fn handle_command(&mut self, command: DroneCommand) {
         match command {
-            DroneCommand::AddSender(_node_id, _sender) => self.add_sender(_node_id, _sender),
-            DroneCommand::SetPacketDropRate(_pdr) => self.set_pdr(_pdr),
+            DroneCommand::AddSender(node_id, sender) => self.add_sender(node_id, sender),
+            DroneCommand::SetPacketDropRate(pdr) => self.set_pdr(pdr),
             DroneCommand::Crash => unreachable!(),
-            DroneCommand::RemoveSender(_node_id) => self.remove_sender(_node_id),
+            DroneCommand::RemoveSender(node_id) => self.remove_sender(node_id),
         }
     }
 
@@ -93,7 +93,7 @@ impl BetterCallDrone {
     }
 
     fn log_received(&self, packet: &Packet) {
-        let message = format!("{} : ({}:{}) {} -> {}",
+        let message = format!("{} : ({}:{}) {} -> {} | {:?}",
                               format!("[DRONE {}]", self.id).purple(),
                               packet.session_id,
                               packet.get_fragment_index(),
@@ -104,7 +104,7 @@ impl BetterCallDrone {
                                   PacketType::FloodRequest(_) => "FloodRequest".yellow(),
                                   PacketType::FloodResponse(_) => "FloodResponse".yellow(),
                                   PacketType::MsgFragment(_) => "Message".cyan(),
-                              },
+                              }, packet,
         );
         self.log(&message);
     }
@@ -121,7 +121,7 @@ impl BetterCallDrone {
     }
 
     fn log_forwarded(&self, packet: &Packet) {
-        let message = format!("{} : ({}:{}) {} -> {} | {}",
+        let message = format!("{} : ({}:{}) {} -> {} | {:?}",
                               format!("[DRONE {}]", self.id).purple(),
                               packet.session_id,
                               packet.get_fragment_index(),
@@ -156,6 +156,7 @@ impl BetterCallDrone {
                 self.send_nack(packet.routing_header.clone(), fragment_index, packet.session_id, NackType::DestinationIsDrone);
             }
         } else {
+            packet.routing_header.hops[packet.routing_header.hop_index] = self.id;
             self.send_nack(packet.routing_header.clone(), fragment_index, packet.session_id, NackType::UnexpectedRecipient(self.id));
         }
     }
@@ -172,7 +173,7 @@ impl BetterCallDrone {
             self.forward_packet(packet, index);
         } else {
             self.send_nack(routing_header, fragment.fragment_index, session_id, NackType::Dropped);
-            self.controller_send.send(PacketDropped(packet)).unwrap()       // sending confirmation of drop to SC
+            self.controller_send.send(PacketDropped(packet.clone())).unwrap()       // sending confirmation of drop to SC
         }
     }
 
