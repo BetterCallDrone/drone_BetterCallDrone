@@ -1,6 +1,6 @@
 #[allow(unused)]
 use crossbeam_channel::{select_biased, Receiver, Sender};
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use colored::*;
 use rand::random;
 use wg_2024::controller::{DroneCommand, DroneEvent};
@@ -17,7 +17,7 @@ pub struct BetterCallDrone {
     pdr: f32,
     pub packet_send: HashMap<NodeId, Sender<Packet>>,
 
-    received_flood_ids: Vec<u64>,
+    received_flood_ids: HashSet<(u64, NodeId)>,
     debug: bool,
 }
 
@@ -37,7 +37,7 @@ impl Drone for BetterCallDrone {
             packet_recv,
             packet_send,
             pdr,
-            received_flood_ids: Vec::new(),
+            received_flood_ids: HashSet::new(),
             debug: true,
         }
     }
@@ -68,10 +68,9 @@ impl BetterCallDrone {
     pub fn handle_packet(&mut self, packet: Packet) {
         self.log_received(&packet);
         match packet.pack_type {
-            PacketType::Nack(_) | PacketType::Ack(_) => self.forward_packet(packet, 0),
+            PacketType::Nack(_) | PacketType::Ack(_) | PacketType::FloodResponse(_) => self.forward_packet(packet, 0),
             PacketType::MsgFragment(_fragment) => self.handle_fragment(packet.routing_header, packet.session_id, _fragment),
             PacketType::FloodRequest(_flood_request) => self.handle_ndp(_flood_request, packet.session_id),
-            PacketType::FloodResponse(_) => self.forward_packet(packet, 0),
         }
     }
     pub fn handle_command(&mut self, command: DroneCommand) {
@@ -182,30 +181,34 @@ impl BetterCallDrone {
     }
 
     pub fn handle_ndp(&mut self, mut flood_request: FloodRequest, session_id: u64) {
-        if self.received_flood_ids.contains(&flood_request.flood_id) {
-            self.forward_flood_response(&mut flood_request, session_id);
-            return;
-        }
-        self.received_flood_ids.push(flood_request.flood_id);
         let prev_node = flood_request.path_trace.last().unwrap().0;
         flood_request.increment(self.id, NodeType::Drone);
-        let mut neighbor_found = false;
-        for (n_id, n_send) in &self.packet_send {
-            if n_id != &prev_node {
-                neighbor_found = true;
-                let packet = Packet::new_flood_request(SourceRoutingHeader::empty_route(), 0, flood_request.clone());
-                n_send.send(packet).unwrap();
-            }
-        }
-        if !neighbor_found {
+
+        if self.received_flood_ids.contains(&(flood_request.flood_id, flood_request.initiator_id)) {
             self.forward_flood_response(&mut flood_request, session_id);
+            return;
+        } else {
+            self.received_flood_ids.insert((flood_request.flood_id, flood_request.initiator_id));
+            let neighbors: Vec<(NodeId, Sender<Packet>)> = self.packet_send
+                .iter()
+                .filter(|(&neighbor_id, _)| neighbor_id != prev_node)
+                .map(|(&neighbor_id, sender)| (neighbor_id, sender.clone()))
+                .collect();
+            if !neighbors.is_empty() {
+                for (_n_id, n_send) in neighbors {
+                    let packet = Packet::new_flood_request(SourceRoutingHeader::empty_route(), session_id, flood_request.clone());
+                    n_send.send(packet.clone()).unwrap();
+                    self.log_forwarded(&packet);
+                }
+            } else {
+                self.forward_flood_response(&mut flood_request, session_id);
+                return;
+            }
         }
     }
 
-
     pub fn forward_flood_response(&mut self, flood_request: &mut FloodRequest, session_id: u64) {
-        let mut packet = flood_request.generate_response(session_id);
-        packet.routing_header.hop_index += 1;
+        let packet = flood_request.generate_response(session_id);
         self.forward_packet(packet, 0);
     }
 
