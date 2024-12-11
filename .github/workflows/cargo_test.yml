@@ -1,7 +1,7 @@
 name: CargoTest
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
 
 jobs:
   build:
@@ -10,4 +10,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test src/ --no-fail-fast --color always
+      - run: cargo test --workspace --no-fail-fast --color always
