@@ -183,7 +183,6 @@ impl BetterCallDrone {
     pub fn handle_ndp(&mut self, mut flood_request: FloodRequest, session_id: u64) {
         let prev_node = flood_request.path_trace.last().unwrap().0;
         flood_request.increment(self.id, NodeType::Drone);
-
         if self.received_flood_ids.contains(&(flood_request.flood_id, flood_request.initiator_id)) {
             self.forward_flood_response(&mut flood_request, session_id);
             return;
