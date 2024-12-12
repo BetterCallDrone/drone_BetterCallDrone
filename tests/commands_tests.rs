@@ -8,7 +8,7 @@ mod commands_tests {
     use wg_2024::controller::{DroneCommand, DroneEvent};
     use wg_2024::drone::Drone;
     use wg_2024::network::SourceRoutingHeader;
-    use wg_2024::packet::{Fragment, Nack, NackType, Packet, PacketType};
+    use wg_2024::packet::{FloodResponse, Fragment, Nack, NackType, NodeType, Packet, PacketType};
     use drone_bettercalldrone::BetterCallDrone;
 
     const TIMEOUT: Duration = Duration::from_millis(400);
@@ -299,5 +299,182 @@ mod commands_tests {
         let drone = drone.lock().unwrap();
         assert_eq!(drone.packet_send.len(), 1);
         assert!(drone.packet_send.get(&14).is_none());
+    }
+
+    #[test]
+    fn test_crash_message() {
+        let (c_send, c_recv) = unbounded();
+        let (d_send, d_recv) = unbounded();
+        let (d2_send, _d2_recv) = unbounded::<Packet>();
+        let (d_command_send, d_command_recv) = unbounded();
+        let (d_event_send, _d_event_recv) = unbounded();
+
+        let mut drone = BetterCallDrone::new(
+            11,
+            d_event_send,
+            d_command_recv,
+            d_recv.clone(),
+            HashMap::from([(1, c_send.clone()), (12, d2_send.clone())]),
+            0.0,
+        );
+
+        let packet = Packet {
+            pack_type: PacketType::MsgFragment(Fragment {
+                fragment_index: 1,
+                total_n_fragments: 1,
+                length: 128,
+                data: [1; 128],
+            }),
+            routing_header: SourceRoutingHeader {
+                hop_index: 1,
+                hops: vec![1, 11, 12],
+            },
+            session_id: 1,
+        };
+
+        thread::spawn(move || {
+            drone.run();
+        });
+
+        d_command_send.send(DroneCommand::Crash).unwrap();
+        d_send.send(packet).unwrap();
+
+        assert_eq!(
+            c_recv.recv_timeout(TIMEOUT).unwrap(),
+            Packet {
+                pack_type: PacketType::Nack(Nack {
+                    fragment_index: 1,
+                    nack_type: NackType::ErrorInRouting(11),
+                }),
+                routing_header: SourceRoutingHeader {
+                    hop_index: 1,
+                    hops: vec![11, 1],
+                },
+                session_id: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn test_crash_ack() {
+        let (c_send, c_recv) = unbounded();
+        let (d_send, d_recv) = unbounded();
+        let (d2_send, _d2_recv) = unbounded::<Packet>();
+        let (d_command_send, d_command_recv) = unbounded();
+        let (d_event_send, _d_event_recv) = unbounded();
+
+        let mut drone = BetterCallDrone::new(
+            11,
+            d_event_send,
+            d_command_recv,
+            d_recv.clone(),
+            HashMap::from([(1, c_send.clone()), (12, d2_send.clone())]),
+            0.0,
+        );
+
+        let mut ack = Packet::new_ack(
+            SourceRoutingHeader {
+                hop_index: 1,
+                hops: vec![12, 11, 1],
+            },
+            1,
+            1,
+        );
+
+        thread::spawn(move || {
+            drone.run();
+        });
+
+        d_command_send.send(DroneCommand::Crash).unwrap();
+        d_send.send(ack.clone()).unwrap();
+
+        ack.routing_header.hop_index += 1;
+
+        assert_eq!(
+            c_recv.recv_timeout(TIMEOUT).unwrap(), ack);
+    }
+
+    #[test]
+    fn test_crash_nack() {
+        let (c_send, c_recv) = unbounded();
+        let (d_send, d_recv) = unbounded();
+        let (d2_send, _d2_recv) = unbounded::<Packet>();
+        let (d_command_send, d_command_recv) = unbounded();
+        let (d_event_send, _d_event_recv) = unbounded();
+
+        let mut drone = BetterCallDrone::new(
+            11,
+            d_event_send,
+            d_command_recv,
+            d_recv.clone(),
+            HashMap::from([(1, c_send.clone()), (12, d2_send.clone())]),
+            0.0,
+        );
+
+        let mut nack = Packet::new_nack(
+            SourceRoutingHeader {
+                hop_index: 1,
+                hops: vec![12, 11, 1],
+            },
+            1,
+            Nack {
+                fragment_index: 1,
+                nack_type: NackType::Dropped,
+            },
+        );
+
+        thread::spawn(move || {
+            drone.run();
+        });
+
+        d_command_send.send(DroneCommand::Crash).unwrap();
+        d_send.send(nack.clone()).unwrap();
+
+        nack.routing_header.hop_index += 1;
+
+        assert_eq!(
+            c_recv.recv_timeout(TIMEOUT).unwrap(), nack);
+    }
+
+    #[test]
+    fn test_crash_flood_response() {
+        let (c_send, c_recv) = unbounded();
+        let (d_send, d_recv) = unbounded();
+        let (d2_send, _d2_recv) = unbounded::<Packet>();
+        let (d_command_send, d_command_recv) = unbounded();
+        let (d_event_send, _d_event_recv) = unbounded();
+
+        let mut drone = BetterCallDrone::new(
+            11,
+            d_event_send,
+            d_command_recv,
+            d_recv.clone(),
+            HashMap::from([(1, c_send.clone()), (12, d2_send.clone())]),
+            0.0,
+        );
+
+        let mut fr = Packet {
+            pack_type: PacketType::FloodResponse(FloodResponse {
+                flood_id: 777,
+                path_trace: vec![(12, NodeType::Drone), (11, NodeType::Drone), (1, NodeType::Client)],
+            }),
+            routing_header: SourceRoutingHeader {
+                hop_index: 1,
+                hops: vec![12, 11, 1],
+            },
+            session_id: 4,
+        };
+
+        thread::spawn(move || {
+            drone.run();
+        });
+
+        d_command_send.send(DroneCommand::Crash).unwrap();
+        d_send.send(fr.clone()).unwrap();
+
+        fr.routing_header.hop_index += 1;
+
+        assert_eq!(
+            c_recv.recv_timeout(TIMEOUT).unwrap(), fr);
     }
 }

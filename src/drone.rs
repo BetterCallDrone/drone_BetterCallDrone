@@ -37,6 +37,7 @@ impl Drone for BetterCallDrone {
             packet_recv,
             packet_send,
             pdr,
+
             received_flood_ids: HashSet::new(),
             debug: true,
         }
@@ -49,6 +50,7 @@ impl Drone for BetterCallDrone {
                     if let Ok(command) = command {
                         if let DroneCommand::Crash = command {
                             println!("drone {} crashed", self.id);
+                            self.crash_drone();
                             break;
                         }
                         self.handle_command(command);
@@ -143,21 +145,20 @@ impl BetterCallDrone {
 
     pub fn forward_packet(&mut self, mut packet: Packet, fragment_index: u64) {
         if self.id == packet.routing_header.hops[packet.routing_header.hop_index] {
-            packet.routing_header.hop_index += 1;
-            if let Some(next_hop) = packet.routing_header.hops.get(packet.routing_header.hop_index) {
+            if let Some(next_hop) = packet.routing_header.hops.get(packet.routing_header.hop_index + 1) {
+                packet.routing_header.hop_index += 1;
                 if let Some(sender) = self.packet_send.get(next_hop) {
                     sender.send(packet.clone()).unwrap();                    // forwarding packet to next_hop
                     self.controller_send.send(PacketSent(packet.clone())).unwrap();  // sending confirmation to the SC
                     self.log_forwarded(&packet);
                 } else {
-                    self.send_nack(packet.routing_header.clone(), fragment_index, packet.session_id, NackType::ErrorInRouting(*next_hop));
+                    self.send_nack(packet.clone(), fragment_index, NackType::ErrorInRouting(*next_hop));
                 }
             } else {
-                self.send_nack(packet.routing_header.clone(), fragment_index, packet.session_id, NackType::DestinationIsDrone);
+                self.send_nack(packet, fragment_index, NackType::DestinationIsDrone);
             }
         } else {
-            packet.routing_header.hops[packet.routing_header.hop_index] = self.id;
-            self.send_nack(packet.routing_header.clone(), fragment_index, packet.session_id, NackType::UnexpectedRecipient(self.id));
+            self.send_nack(packet, fragment_index, NackType::UnexpectedRecipient(self.id));
         }
     }
 
@@ -172,7 +173,7 @@ impl BetterCallDrone {
             let index = fragment.fragment_index;
             self.forward_packet(packet, index);
         } else {
-            self.send_nack(routing_header, fragment.fragment_index, session_id, NackType::Dropped);
+            self.send_nack(packet.clone(), fragment.fragment_index, NackType::Dropped);
             self.controller_send.send(PacketDropped(packet.clone())).unwrap()       // sending confirmation of drop to SC
         }
     }
@@ -212,28 +213,37 @@ impl BetterCallDrone {
         self.forward_packet(packet, 0);
     }
 
-    pub fn send_nack(&mut self, routing_header: SourceRoutingHeader, fragment_index: u64, session_id: u64, nack_type: NackType) {
-        let nack = Nack { fragment_index, nack_type };
-        let self_index = routing_header
-            .hops
-            .iter()
-            .position(|&hop| hop == self.id as u8)
-            .unwrap_or(0);
-        let reversed_hops: Vec<NodeId> = routing_header.hops[..=self_index]
-            .iter()
-            .cloned()
-            .rev()
-            .collect();
-        if let Some(sender) = self.packet_send.get(&reversed_hops[1]) {
-            sender.send(Packet {
-                pack_type: PacketType::Nack(nack.clone()),
-                routing_header: SourceRoutingHeader {
-                    hop_index: 1,
-                    hops: reversed_hops,
-                },
-                session_id,
-            }).unwrap();
-            self.log_nack(&nack_type, session_id, fragment_index);
+    pub fn send_nack(&mut self, mut packet: Packet, fragment_index: u64, nack_type: NackType) {
+        match packet.pack_type {
+            PacketType::Nack(_) | PacketType::Ack(_) | PacketType::FloodResponse(_) => {
+                self.controller_send.send(DroneEvent::ControllerShortcut(packet.clone())).unwrap();
+            }
+            _ => {
+                packet.routing_header.hops[packet.routing_header.hop_index] = self.id;
+                let nack = Nack { fragment_index, nack_type };
+                let self_index = packet.routing_header
+                    .hops
+                    .iter()
+                    .position(|&hop| hop == self.id)
+                    .unwrap_or(0);
+                let reversed_hops: Vec<NodeId> = packet.routing_header.hops[..=self_index]
+                    .iter()
+                    .cloned()
+                    .rev()
+                    .collect();
+
+                if let Some(sender) = self.packet_send.get(&reversed_hops[1]) {
+                    sender.send(Packet {
+                        pack_type: PacketType::Nack(nack.clone()),
+                        routing_header: SourceRoutingHeader {
+                            hop_index: 1,
+                            hops: reversed_hops,
+                        },
+                        session_id: packet.session_id,
+                    }).unwrap();
+                    self.log_nack(&nack_type, packet.session_id, fragment_index);
+                }
+            }
         }
     }
 
@@ -242,7 +252,7 @@ impl BetterCallDrone {
     /// ======================================================================
 
     pub fn add_sender(&mut self, node_id: NodeId, sender: Sender<Packet>) {
-        if let Some(_) = self.packet_send.get(&node_id) {
+        if self.packet_send.get(&node_id).is_some() {
             println!("Error while trying to add sender id: {}, from drone #{}: Sender id already exists!", node_id, self.id);
         } else {
             self.packet_send.insert(node_id, sender);
@@ -251,7 +261,7 @@ impl BetterCallDrone {
     }
 
     pub fn set_pdr(&mut self, pdr: f32) {
-        if pdr >= 0. && pdr <= 1. {
+        if (0.0..=1.0).contains(&pdr) {
             self.pdr = pdr;
             println!("Set PDR: Updated for drone #{} to: {}", self.id, pdr);
         } else {
@@ -260,7 +270,7 @@ impl BetterCallDrone {
     }
 
     pub fn remove_sender(&mut self, node_id: NodeId) {
-        if let Some(_) = self.packet_send.get(&node_id) {
+        if self.packet_send.get(&node_id).is_some() {
             self.packet_send.remove(&node_id);
             println!("Removed sender id: {}, from drone #{}", node_id, self.id);
         } else {
@@ -268,4 +278,15 @@ impl BetterCallDrone {
         }
     }
 
+    pub fn crash_drone(&mut self){
+        while let Ok(packet) = self.packet_recv.try_recv() {
+            match &packet.pack_type {
+                PacketType::MsgFragment(frag) => {
+                    self.send_nack(packet.clone(), frag.fragment_index, NackType::ErrorInRouting(self.id));
+                }
+                PacketType::FloodRequest(_) => {}
+                _ => self.forward_packet(packet, 0),
+            }
+        }
+    }
 }
