@@ -1,7 +1,7 @@
 #[allow(unused)]
 use crossbeam_channel::{select_biased, Receiver, Sender};
 use std::collections::{HashMap, HashSet};
-use colored::*;
+use colored::Colorize;
 use rand::random;
 use wg_2024::controller::{DroneCommand, DroneEvent};
 use wg_2024::controller::DroneEvent::{PacketDropped, PacketSent};
@@ -71,7 +71,7 @@ impl BetterCallDrone {
         self.log_received(&packet);
         match packet.pack_type {
             PacketType::Nack(_) | PacketType::Ack(_) | PacketType::FloodResponse(_) => self.forward_packet(packet, 0),
-            PacketType::MsgFragment(fragment) => self.handle_fragment(packet.routing_header, packet.session_id, fragment),
+            PacketType::MsgFragment(fragment) => self.handle_fragment(&packet.routing_header, packet.session_id, &fragment),
             PacketType::FloodRequest(flood_request) => self.handle_ndp(flood_request, packet.session_id),
         }
     }
@@ -90,7 +90,7 @@ impl BetterCallDrone {
 
     fn log(&self, message: &str) {
         if self.debug {
-            println!("{}", message);
+            println!("{message}");
         }
     }
 
@@ -111,13 +111,13 @@ impl BetterCallDrone {
         self.log(&message);
     }
 
-    fn log_nack(&self, nack_type: &NackType, session_id: u64, fragment_index: u64) {
+    fn log_nack(&self, nack_type: NackType, session_id: u64, fragment_index: u64) {
         let message = format!("{} : ({}:{}) {} -> {}",
                               format!("[DRONE {}]", self.id).purple(),
                               session_id,
                               fragment_index,
                               "SentNack".red(),
-                              format!("{:?}", nack_type).red(),
+                              format!("{nack_type:?}").red(),
         );
         self.log(&message);
     }
@@ -162,22 +162,23 @@ impl BetterCallDrone {
         }
     }
 
-    pub fn handle_fragment(&mut self, routing_header : SourceRoutingHeader, session_id : u64, fragment: Fragment) {
+    pub fn handle_fragment(&mut self, routing_header : &SourceRoutingHeader, session_id : u64, fragment: &Fragment) {
         let rh = routing_header.clone();
         let packet = Packet {
             routing_header: rh,
             session_id,
             pack_type: PacketType::MsgFragment(fragment.clone()),
         };
-        if !self.should_drop_packet() {
+        if self.should_drop_packet() {
+            self.send_nack(packet.clone(), fragment.fragment_index, NackType::Dropped);
+            self.controller_send.send(PacketDropped(packet.clone())).unwrap();       // sending confirmation of drop to SC
+        } else {
             let index = fragment.fragment_index;
             self.forward_packet(packet, index);
-        } else {
-            self.send_nack(packet.clone(), fragment.fragment_index, NackType::Dropped);
-            self.controller_send.send(PacketDropped(packet.clone())).unwrap()       // sending confirmation of drop to SC
         }
     }
 
+    #[must_use]
     pub fn should_drop_packet(&self) -> bool {
         random::<f32>() <= self.pdr
     }
@@ -187,7 +188,6 @@ impl BetterCallDrone {
         flood_request.increment(self.id, NodeType::Drone);
         if self.received_flood_ids.contains(&(flood_request.flood_id, flood_request.initiator_id)) {
             self.forward_flood_response(&mut flood_request, session_id);
-            return;
         } else {
             self.received_flood_ids.insert((flood_request.flood_id, flood_request.initiator_id));
             let neighbors: Vec<(NodeId, Sender<Packet>)> = self.packet_send
@@ -195,15 +195,14 @@ impl BetterCallDrone {
                 .filter(|(&neighbor_id, _)| neighbor_id != prev_node)
                 .map(|(&neighbor_id, sender)| (neighbor_id, sender.clone()))
                 .collect();
-            if !neighbors.is_empty() {
+            if neighbors.is_empty() {
+                self.forward_flood_response(&mut flood_request, session_id);
+            } else {
                 for (_n_id, n_send) in neighbors {
                     let packet = Packet::new_flood_request(SourceRoutingHeader::empty_route(), session_id, flood_request.clone());
                     n_send.send(packet.clone()).unwrap();
                     self.log_forwarded(&packet);
                 }
-            } else {
-                self.forward_flood_response(&mut flood_request, session_id);
-                return;
             }
         }
     }
@@ -228,7 +227,7 @@ impl BetterCallDrone {
                     .unwrap_or(0);
                 let reversed_hops: Vec<NodeId> = packet.routing_header.hops[..=self_index]
                     .iter()
-                    .cloned()
+                    .copied()
                     .rev()
                     .collect();
 
@@ -241,7 +240,7 @@ impl BetterCallDrone {
                         },
                         session_id: packet.session_id,
                     }).unwrap();
-                    self.log_nack(&nack_type, packet.session_id, fragment_index);
+                    self.log_nack(nack_type, packet.session_id, fragment_index);
                 }
             }
         }
@@ -252,7 +251,7 @@ impl BetterCallDrone {
     /// ======================================================================
 
     pub fn add_sender(&mut self, node_id: NodeId, sender: Sender<Packet>) {
-        if self.packet_send.get(&node_id).is_some() {
+        if self.packet_send.contains_key(&node_id) {
             println!("Error while trying to add sender id: {}, from drone #{}: Sender id already exists!", node_id, self.id);
         } else {
             self.packet_send.insert(node_id, sender);
@@ -270,7 +269,7 @@ impl BetterCallDrone {
     }
 
     pub fn remove_sender(&mut self, node_id: NodeId) {
-        if self.packet_send.get(&node_id).is_some() {
+        if self.packet_send.contains_key(&node_id) {
             self.packet_send.remove(&node_id);
             println!("Removed sender id: {}, from drone #{}", node_id, self.id);
         } else {
