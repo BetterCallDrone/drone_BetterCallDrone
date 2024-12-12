@@ -261,7 +261,7 @@ impl BetterCallDrone {
     }
 
     pub fn set_pdr(&mut self, pdr: f32) {
-        if (0. ..=1.).contains(&pdr) {
+        if (0.0..=1.0).contains(&pdr) {
             self.pdr = pdr;
             println!("Set PDR: Updated for drone #{} to: {}", self.id, pdr);
         } else {
