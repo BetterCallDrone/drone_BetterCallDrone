@@ -37,6 +37,7 @@ impl Drone for BetterCallDrone {
             packet_recv,
             packet_send,
             pdr,
+
             received_flood_ids: HashSet::new(),
             debug: true,
         }
@@ -49,6 +50,7 @@ impl Drone for BetterCallDrone {
                     if let Ok(command) = command {
                         if let DroneCommand::Crash = command {
                             println!("drone {} crashed", self.id);
+                            self.crash_drone();
                             break;
                         }
                         self.handle_command(command);
@@ -276,4 +278,15 @@ impl BetterCallDrone {
         }
     }
 
+    pub fn crash_drone(&mut self){
+        while let Ok(packet) = self.packet_recv.try_recv() {
+            match &packet.pack_type {
+                PacketType::MsgFragment(frag) => {
+                    self.send_nack(packet.clone(), frag.fragment_index, NackType::ErrorInRouting(self.id));
+                }
+                PacketType::FloodRequest(_) => {}
+                _ => self.forward_packet(packet, 0),
+            }
+        }
+    }
 }
