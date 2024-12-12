@@ -37,6 +37,7 @@ impl Drone for BetterCallDrone {
             packet_recv,
             packet_send,
             pdr,
+
             received_flood_ids: HashSet::new(),
             debug: true,
         }
@@ -49,6 +50,7 @@ impl Drone for BetterCallDrone {
                     if let Ok(command) = command {
                         if let DroneCommand::Crash = command {
                             println!("drone {} crashed", self.id);
+                            self.crash_drone();
                             break;
                         }
                         self.handle_command(command);
@@ -222,7 +224,7 @@ impl BetterCallDrone {
                 let self_index = packet.routing_header
                     .hops
                     .iter()
-                    .position(|&hop| hop == self.id as u8)
+                    .position(|&hop| hop == self.id)
                     .unwrap_or(0);
                 let reversed_hops: Vec<NodeId> = packet.routing_header.hops[..=self_index]
                     .iter()
@@ -250,7 +252,7 @@ impl BetterCallDrone {
     /// ======================================================================
 
     pub fn add_sender(&mut self, node_id: NodeId, sender: Sender<Packet>) {
-        if let Some(_) = self.packet_send.get(&node_id) {
+        if self.packet_send.get(&node_id).is_some() {
             println!("Error while trying to add sender id: {}, from drone #{}: Sender id already exists!", node_id, self.id);
         } else {
             self.packet_send.insert(node_id, sender);
@@ -259,7 +261,7 @@ impl BetterCallDrone {
     }
 
     pub fn set_pdr(&mut self, pdr: f32) {
-        if pdr >= 0. && pdr <= 1. {
+        if (0.0..=1.0).contains(&pdr) {
             self.pdr = pdr;
             println!("Set PDR: Updated for drone #{} to: {}", self.id, pdr);
         } else {
@@ -268,7 +270,7 @@ impl BetterCallDrone {
     }
 
     pub fn remove_sender(&mut self, node_id: NodeId) {
-        if let Some(_) = self.packet_send.get(&node_id) {
+        if self.packet_send.get(&node_id).is_some() {
             self.packet_send.remove(&node_id);
             println!("Removed sender id: {}, from drone #{}", node_id, self.id);
         } else {
@@ -276,4 +278,15 @@ impl BetterCallDrone {
         }
     }
 
+    pub fn crash_drone(&mut self){
+        while let Ok(packet) = self.packet_recv.try_recv() {
+            match &packet.pack_type {
+                PacketType::MsgFragment(frag) => {
+                    self.send_nack(packet.clone(), frag.fragment_index, NackType::ErrorInRouting(self.id));
+                }
+                PacketType::FloodRequest(_) => {}
+                _ => self.forward_packet(packet, 0),
+            }
+        }
+    }
 }
