@@ -72,7 +72,7 @@ running 4 tests
 test wg2024_repo_tests::test_generic_fragment_forward ... ok
 test wg2024_repo_tests::test_generic_fragment_drop ... ok
 test wg2024_repo_tests::test_generic_chain_fragment_ack ... ok
-test wg2024_repo_tests::test_generic_chain_fragment_drop ... ok
+test wg2024_repo_tests::test_generic_chain_fragment_drop ... ok
 
 ```
 
@@ -89,7 +89,7 @@ To get a local copy up and running follow these simple example steps.
 
 ```rust
 [dependencies]
-drone_bettercalldrone = { git = "https://github.com/BetterCallDrone/drone_BetterCallDrone.git" }
+drone_bettercalldrone = { git = "https://github.com/BetterCallDrone/drone_BetterCallDrone.git" }
 ```
 
 ## Contacts
@@ -97,3 +97,11 @@ drone_bettercalldrone = { git = "https://github.com/BetterCallDrone/drone_Better
 Our group: [Telegram](https://t.me/+htrHjxyTQEE2ZWRk)
 
 Direct contact: [Mukund Gupta, Group Leader](https://t.me/guptamukund)
+
+## Thanks for choosing us ❤
+
+- Bobry w locie
+- Rustable
+- C++ enjoyers
+- Game of drones
+  - RustRoveri
