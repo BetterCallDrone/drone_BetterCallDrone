@@ -224,7 +224,7 @@ impl BetterCallDrone {
                 let self_index = packet.routing_header
                     .hops
                     .iter()
-                    .position(|&hop| hop == self.id as u8)
+                    .position(|&hop| hop == self.id)
                     .unwrap_or(0);
                 let reversed_hops: Vec<NodeId> = packet.routing_header.hops[..=self_index]
                     .iter()
@@ -252,7 +252,7 @@ impl BetterCallDrone {
     /// ======================================================================
 
     pub fn add_sender(&mut self, node_id: NodeId, sender: Sender<Packet>) {
-        if let Some(_) = self.packet_send.get(&node_id) {
+        if self.packet_send.get(&node_id).is_some() {
             println!("Error while trying to add sender id: {}, from drone #{}: Sender id already exists!", node_id, self.id);
         } else {
             self.packet_send.insert(node_id, sender);
@@ -261,7 +261,7 @@ impl BetterCallDrone {
     }
 
     pub fn set_pdr(&mut self, pdr: f32) {
-        if pdr >= 0. && pdr <= 1. {
+        if (0. ..=1.).contains(&pdr) {
             self.pdr = pdr;
             println!("Set PDR: Updated for drone #{} to: {}", self.id, pdr);
         } else {
@@ -270,7 +270,7 @@ impl BetterCallDrone {
     }
 
     pub fn remove_sender(&mut self, node_id: NodeId) {
-        if let Some(_) = self.packet_send.get(&node_id) {
+        if self.packet_send.get(&node_id).is_some() {
             self.packet_send.remove(&node_id);
             println!("Removed sender id: {}, from drone #{}", node_id, self.id);
         } else {
