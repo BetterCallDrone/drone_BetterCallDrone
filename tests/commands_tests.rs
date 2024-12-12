@@ -8,7 +8,7 @@ mod commands_tests {
     use wg_2024::controller::{DroneCommand, DroneEvent};
     use wg_2024::drone::Drone;
     use wg_2024::network::SourceRoutingHeader;
-    use wg_2024::packet::{FloodResponse, Fragment, Nack, NackType, NodeType, Packet, PacketType};
+    use wg_2024::packet::{FloodRequest, FloodResponse, Fragment, Nack, NackType, NodeType, Packet, PacketType};
     use drone_bettercalldrone::BetterCallDrone;
 
     const TIMEOUT: Duration = Duration::from_millis(400);
@@ -476,5 +476,45 @@ mod commands_tests {
 
         assert_eq!(
             c_recv.recv_timeout(TIMEOUT).unwrap(), fr);
+    }
+
+    #[test]
+    fn test_crash_flood_request() {
+        let (c_send, c_recv) = unbounded();
+        let (d_send, d_recv) = unbounded();
+        let (d2_send, _d2_recv) = unbounded::<Packet>();
+        let (d_command_send, d_command_recv) = unbounded();
+        let (d_event_send, _d_event_recv) = unbounded();
+
+        let mut drone = BetterCallDrone::new(
+            11,
+            d_event_send,
+            d_command_recv,
+            d_recv.clone(),
+            HashMap::from([(1, c_send.clone()), (12, d2_send.clone())]),
+            0.0,
+        );
+
+        let fr = Packet {
+            pack_type: PacketType::FloodRequest(FloodRequest {
+                flood_id: 777,
+                initiator_id: 1,
+                path_trace: vec![(1, NodeType::Client)],
+            }),
+            routing_header: SourceRoutingHeader::empty_route(),
+            session_id: 4,
+        };
+
+        thread::spawn(move || {
+            drone.run();
+        });
+
+        d_command_send.send(DroneCommand::Crash).unwrap();
+        d_send.send(fr).unwrap();
+
+        assert!(
+            c_recv.recv_timeout(TIMEOUT).is_err(),
+            "Client 1 unexpectedly received a packet after the drone crashed"
+        );
     }
 }
