@@ -97,3 +97,11 @@ drone_bettercalldrone = { git = "https://github.com/BetterCallDrone/drone_Better
 Our group: [Telegram](https://t.me/+htrHjxyTQEE2ZWRk)
 
 Direct contact: [Mukund Gupta, Group Leader](https://t.me/guptamukund)
+
+## Thanks for choosing us ❤
+
+- Bobry w locie
+- Rustable
+- C++ enjoyers
+- Game of drones
+  - RustRoveri
