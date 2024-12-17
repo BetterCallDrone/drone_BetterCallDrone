@@ -3,8 +3,8 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/BetterCallDrone/SoftwareFaire">
-    <img src="images/bettercalldrone_logo.png" alt="Logo" width="150">
+  <a href="https://github.com/BetterCallDrone">
+    <img src="assets/bettercalldrone_logo.png" alt="Logo" width="150">
   </a>
 
   <i>
@@ -27,10 +27,10 @@ Welcome to our repository! Our drone emphasizes **minimalism**, **efficiency**, 
 - **100% Code Coverage**: Comprehensive testing guarantees that every part of the code is thoroughly tested, ensuring reliability and robustness.
 - **All Tests Pass**: Rigorous testing procedures mean that all tests pass consistently, providing confidence in the project's stability and functionality.
 
-```console
+```sh
 Running tests\commands_tests.rs
 
-running 10 tests
+running 11 tests
 test commands_tests::test_remove_non_existing_sender ... ok
 test commands_tests::test_crash_flood_response ... ok
 test commands_tests::test_crash_ack ... ok
@@ -41,8 +41,9 @@ test commands_tests::test_set_pdr ... ok
 test commands_tests::test_set_invalid_pdr ... ok
 test commands_tests::test_crash_message ... ok
 test commands_tests::test_remove_sender ... ok
+test commands_tests::test_crash_flood_request ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
 
      Running tests\flood_tests.rs
 
@@ -104,4 +105,4 @@ Direct contact: [Mukund Gupta, Group Leader](https://t.me/guptamukund)
 - Rustable
 - C++ enjoyers
 - Game of drones
-  - RustRoveri
+- RustRoveri
