@@ -257,6 +257,7 @@ name = "wg_config"
 version = "0.1.0"
 source = "git+https://github.com/WGL-2024/WGL_repo_2024.git#85f907eed84da8703749ff327841306d42e8af01"
 dependencies = [
+ "serde",
  "wg_network",
 ]
 
