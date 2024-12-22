@@ -88,9 +88,35 @@ To get a local copy up and running follow these simple example steps.
 
 ### Usage
 
-```rust
+```toml
 [dependencies]
 drone_bettercalldrone = { git = "https://github.com/BetterCallDrone/drone_BetterCallDrone.git" }
+```
+
+## Debug
+We provide detailed debugging with color-coded emphasis to highlight key events and processes, here are some examples:
+
+!["debug"](assets/debug.png)
+
+### Usage in PowerShell
+To activate debugging, set the `BCD_DEBUG` environment variable in your command line:
+
+```powershell
+$env:BCD_DEBUG=1; cargo run
+```
+
+To deactivate debugging, clear the `BCD_DEBUG` variable:
+
+```powershell
+$env:BCD_DEBUG=$null
+```
+
+### Usage in Other CLI Tools
+
+To activate debugging, set the `BCD_DEBUG` environment variable in your command line:
+
+```shell
+BCD_DEBUG=1 cargo run
 ```
 
 ## Contacts
