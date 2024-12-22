@@ -1,6 +1,7 @@
 #[allow(unused)]
 use crossbeam_channel::{select_biased, Receiver, Sender};
 use std::collections::{HashMap, HashSet};
+use std::env;
 use colored::Colorize;
 use rand::random;
 use wg_2024::controller::{DroneCommand, DroneEvent};
@@ -30,6 +31,7 @@ impl Drone for BetterCallDrone {
         packet_send: HashMap<NodeId, Sender<Packet>>,
         pdr: f32,
     ) -> Self {
+        let debug_check = env::var("BCD_DEBUG").is_ok();
         Self {
             id,
             controller_send,
@@ -39,17 +41,18 @@ impl Drone for BetterCallDrone {
             pdr,
 
             received_flood_ids: HashSet::new(),
-            debug: true,
+            debug: debug_check,
         }
     }
 
     fn run(&mut self) {
+        self.log(&format!("{}","Successfully spawned and started".green()));
         loop {
             select_biased! {
                 recv(self.controller_recv) -> command => {
                     if let Ok(command) = command {
                         if let DroneCommand::Crash = command {
-                            println!("drone {} crashed", self.id);
+                            self.log(&format!("{}","Received Crash Command from SC".cyan()));
                             self.crash_drone();
                             break;
                         }
@@ -63,6 +66,7 @@ impl Drone for BetterCallDrone {
                 },
             }
         }
+        self.log(&format!("{}","Successfully stopped".green()));
     }
 }
 
@@ -90,13 +94,14 @@ impl BetterCallDrone {
 
     fn log(&self, message: &str) {
         if self.debug {
-            println!("{message}");
+            let m = format!("{} {message}",
+                            format!("[BCDRONE #{}]", self.id).purple(),);
+            println!("{m}");
         }
     }
 
     fn log_received(&self, packet: &Packet) {
-        let message = format!("{} : ({}:{}) {} -> {} | {:?}",
-                              format!("[DRONE {}]", self.id).purple(),
+        let message = format!("({}:{}) | {} -> {} | {}",
                               packet.session_id,
                               packet.get_fragment_index(),
                               "Received".yellow(),
@@ -111,20 +116,20 @@ impl BetterCallDrone {
         self.log(&message);
     }
 
-    fn log_nack(&self, nack_type: NackType, session_id: u64, fragment_index: u64) {
-        let message = format!("{} : ({}:{}) {} -> {}",
-                              format!("[DRONE {}]", self.id).purple(),
+    fn log_nack(&self, nack_type: NackType, session_id: u64, fragment_index: u64, through_sc: bool) {
+        let mut sent = "SentNack";
+        if through_sc {sent = "SentNack through SC";};
+        let message = format!("({}:{}) | {} -> {}",
                               session_id,
                               fragment_index,
-                              "SentNack".red(),
+                              sent.red(),
                               format!("{nack_type:?}").red(),
         );
         self.log(&message);
     }
 
     fn log_forwarded(&self, packet: &Packet) {
-        let message = format!("{} : ({}:{}) {} -> {} | {:?}",
-                              format!("[DRONE {}]", self.id).purple(),
+        let message = format!("({}:{}) | {} -> {} | {}",
                               packet.session_id,
                               packet.get_fragment_index(),
                               "Forwarded".green(),
@@ -216,6 +221,7 @@ impl BetterCallDrone {
         match packet.pack_type {
             PacketType::Nack(_) | PacketType::Ack(_) | PacketType::FloodResponse(_) => {
                 self.controller_send.send(DroneEvent::ControllerShortcut(packet.clone())).unwrap();
+                self.log_nack(nack_type, packet.session_id, fragment_index, true);
             }
             _ => {
                 packet.routing_header.hops[packet.routing_header.hop_index] = self.id;
@@ -240,7 +246,7 @@ impl BetterCallDrone {
                         },
                         session_id: packet.session_id,
                     }).unwrap();
-                    self.log_nack(nack_type, packet.session_id, fragment_index);
+                    self.log_nack(nack_type, packet.session_id, fragment_index, false);
                 }
             }
         }
@@ -251,29 +257,33 @@ impl BetterCallDrone {
     /// ======================================================================
 
     pub fn add_sender(&mut self, node_id: NodeId, sender: Sender<Packet>) {
+        self.log(&format!("{}","Received AddSender Command from SC".cyan()));
         if self.packet_send.contains_key(&node_id) {
+            self.log(&format!("{} -> {} {}","AddSender".cyan(),"Error while trying to remove sender id:".red(), node_id));
             println!("Error while trying to add sender id: {}, from drone #{}: Sender id already exists!", node_id, self.id);
         } else {
             self.packet_send.insert(node_id, sender);
-            println!("Added sender id {} to drone #{}", node_id, self.id);
+            self.log(&format!("{} -> {} {}","AddSender".cyan(),"Successfully added sender id:".green(), node_id));
         }
     }
 
     pub fn set_pdr(&mut self, pdr: f32) {
+        self.log(&format!("{}","Received SetPacketDropRate Command from SC".cyan()));
         if (0.0..=1.0).contains(&pdr) {
             self.pdr = pdr;
-            println!("Set PDR: Updated for drone #{} to: {}", self.id, pdr);
+            self.log(&format!("{} -> {} {}","SetPacketDropRate".cyan(),"Updated PDR to".green(), pdr));
         } else {
-            println!("Set PDR: Invalid PDR for drone #{}", self.id);
+            self.log(&format!("{} -> {}{}{}","SetPacketDropRate".cyan(),"Invalid PDR (".red(), pdr, ")".red()));
         }
     }
 
     pub fn remove_sender(&mut self, node_id: NodeId) {
+        self.log(&format!("{}","Received RemoveSender Command from SC".cyan()));
         if self.packet_send.contains_key(&node_id) {
             self.packet_send.remove(&node_id);
-            println!("Removed sender id: {}, from drone #{}", node_id, self.id);
+            self.log(&format!("{} -> {} {}","RemoveSender".cyan(),"Successfully removed sender id:".green(), node_id));
         } else {
-            println!("Error while trying to remove sender id: {}, from drone #{}: Sender id does not exist!", node_id, self.id);
+            self.log(&format!("{} -> {} {}","RemoveSender".cyan(),"Error while trying to remove sender id:".red(), node_id));
         }
     }
 
@@ -287,5 +297,6 @@ impl BetterCallDrone {
                 _ => self.forward_packet(packet, 0),
             }
         }
+        self.log(&format!("{}, {}","Finished handling packets".green(),"Drone Crashed successfully".red()));
     }
 }

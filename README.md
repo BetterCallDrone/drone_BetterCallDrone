@@ -88,9 +88,44 @@ To get a local copy up and running follow these simple example steps.
 
 ### Usage
 
-```rust
+```toml
 [dependencies]
 drone_bettercalldrone = { git = "https://github.com/BetterCallDrone/drone_BetterCallDrone.git" }
+```
+
+## Debug
+We provide detailed debugging with color-coded emphasis to highlight key events and processes, here are some examples:
+
+<p style="font-family:consolas">
+<span style="color:magenta">[BCDRONE #11]</span><span style="color:green"> Successfully spawned and started</span><br>
+<span style="color:magenta">[BCDRONE #11]</span> (1:1) | <span style="color:yellow">Received</span> -> <span style="color:cyan">Message</span> | {packet}<br>
+<span style="color:magenta">[BCDRONE #11]</span> (1:1) | <span style="color:green">Forwarded</span> -> <span style="color:red">Nack</span> | {packet}<br>
+<span style="color:magenta">[BCDRONE #11]</span> (1:1) | <span style="color:red">SentNack through SC</span> -> <span style="color:red">Dropped</span> | {packet}<br>
+<span style="color:magenta">[BCDRONE #11]</span><span style="color:cyan"> Received Crash Command from SC</span><br>
+<span style="color:magenta">[BCDRONE #11]</span><span style="color:cyan"> Received Crash Command from SC</span><br>
+<span style="color:magenta">[BCDRONE #11]</span> <span style="color:green">Finished handling packets</span>, <span style="color:red">Drone Crashed successfully</span><br>
+<span style="color:magenta">[BCDRONE #11]</span> <span style="color:cyan">AddSender</span> -> <span style="color:green">Successfully added sender id:</span> 12<br>
+</p>
+
+### Usage in PowerShell
+To activate debugging, set the `BCD_DEBUG` environment variable in your command line:
+
+```powershell
+$env:BCD_DEBUG=1; cargo run
+```
+
+To deactivate debugging, clear the `BCD_DEBUG` variable:
+
+```powershell
+$env:BCD_DEBUG=$null
+```
+
+### Usage in Other CLI Tools
+
+To activate debugging, set the `BCD_DEBUG` environment variable in your command line:
+
+```shell
+BCD_DEBUG=1 cargo run
 ```
 
 ## Contacts
