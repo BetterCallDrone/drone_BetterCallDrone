@@ -205,9 +205,17 @@ impl BetterCallDrone {
             if let Some(next_hop) = packet.routing_header.hops.get(packet.routing_header.hop_index + 1) {
                 packet.routing_header.hop_index += 1;
                 if let Some(sender) = self.packet_send.get(next_hop) {
-                    sender.send(packet.clone()).unwrap();                    // forwarding packet to next_hop
-                    self.controller_send.send(PacketSent(packet.clone())).unwrap();  // sending confirmation to the SC
-                    self.log_forwarded(&packet);
+                    if let Err(e) = sender.send(packet.clone()) {
+                        self.log(&format!("{} {}","Error in Forwarding Packet", e));
+                    } else {
+                        self.log_forwarded(&packet);
+                    }
+
+                    if let Err(e) = self.controller_send.send(PacketSent(packet.clone())) {
+                        self.log(&format!("{} {}","Error in Sending `PacketSent` to SC: ", e));
+                    } else {
+                        self.log(&format!("{}","Event PacketSent sent to SC".green()));
+                    }
                 } else {
                     self.send_nack(packet.clone(), fragment_index, NackType::ErrorInRouting(*next_hop));
                 }
@@ -234,7 +242,11 @@ impl BetterCallDrone {
         };
         if self.should_drop_packet() {
             self.send_nack(packet.clone(), fragment.fragment_index, NackType::Dropped);
-            self.controller_send.send(PacketDropped(packet.clone())).unwrap();       // sending confirmation of drop to SC
+            if let Err(e) = self.controller_send.send(PacketDropped(packet.clone())) {
+                self.log(&format!("{} {}","Error in Sending `PacketDropped` to SC: ", e));
+            } else {
+                self.log(&format!("{}","Event PacketDropped sent to SC".green()));
+            }
         } else {
             let index = fragment.fragment_index;
             self.forward_packet(packet, index);
@@ -272,8 +284,11 @@ impl BetterCallDrone {
             } else {
                 for (_n_id, n_send) in neighbors {
                     let packet = Packet::new_flood_request(SourceRoutingHeader::empty_route(), session_id, flood_request.clone());
-                    n_send.send(packet.clone()).unwrap();
-                    self.log_forwarded(&packet);
+                    if let Err(e) = n_send.send(packet.clone()) {
+                        self.log(&format!("{} {}","Error in Sending FloodRequest: ", e));
+                    } else {
+                        self.log_forwarded(&packet);
+                    }
                 }
             }
         }
@@ -298,8 +313,11 @@ impl BetterCallDrone {
     pub fn send_nack(&mut self, mut packet: Packet, fragment_index: u64, nack_type: NackType) {
         match packet.pack_type {
             PacketType::Nack(_) | PacketType::Ack(_) | PacketType::FloodResponse(_) => {
-                self.controller_send.send(DroneEvent::ControllerShortcut(packet.clone())).unwrap();
-                self.log_nack(nack_type, packet.session_id, fragment_index, true);
+                if let Err(e) = self.controller_send.send(DroneEvent::ControllerShortcut(packet.clone())) {
+                    self.log(&format!("{} {}","Error in Sending Nack through SC: ", e));
+                } else {
+                    self.log_nack(nack_type, packet.session_id, fragment_index, true);
+                }
             }
             _ => {
                 packet.routing_header.hops[packet.routing_header.hop_index] = self.id;
@@ -316,15 +334,18 @@ impl BetterCallDrone {
                     .collect();
 
                 if let Some(sender) = self.packet_send.get(&reversed_hops[1]) {
-                    sender.send(Packet {
+                    if let Err(e) = sender.send(Packet {
                         pack_type: PacketType::Nack(nack.clone()),
                         routing_header: SourceRoutingHeader {
                             hop_index: 1,
                             hops: reversed_hops,
                         },
                         session_id: packet.session_id,
-                    }).unwrap();
-                    self.log_nack(nack_type, packet.session_id, fragment_index, false);
+                    }) {
+                        self.log(&format!("{} {}","Error in Sending Nack: ", e));
+                    } else {
+                        self.log_nack(nack_type, packet.session_id, fragment_index, false);
+                    }
                 }
             }
         }
